@@ -1,0 +1,19 @@
+# Downloaded videos
+*.mp4
+*.mkv
+*.webm
+
+# Output files
+chart_output.csv
+calibration.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# IDE
+.vscode/
+.idea/
