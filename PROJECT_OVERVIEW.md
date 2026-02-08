@@ -1,8 +1,8 @@
 # PIU 채보 영상 → CSV 추출 프로그램
 
 ## Context
-YouTube에 올라온 PUMP IT UP 채보 영상(StepF2 등 시뮬레이터 녹화)에서 노트 데이터를 자동 추출하여 CSV 파일로 저장하는 프로그램.
-- 입력: YouTube URL + 채보 구간(시작/끝 시간)
+PUMP IT UP 채보 영상(StepF2 등 시뮬레이터 녹화)에서 노트 데이터를 자동 추출하여 CSV 파일로 저장하는 프로그램.
+- 입력: 로컬 영상 파일 경로 + 채보 구간(시작/끝 시간)
 - 출력: 10개 패널(더블)의 노트 이벤트가 담긴 CSV 파일
 
 ## 핵심 동작 원리
@@ -20,8 +20,9 @@ P1: ↙(DL) ↖(UL) ⬟(C) ↗(UR) ↘(DR) | P2: ↙(DL) ↖(UL) ⬟(C) ↗(UR) 
 
 ## 사용법
 ```bash
-python piu_extractor.py "https://youtu.be/b-PF13GvPqY" --start 13 --end 108
+python piu_extractor.py "my_video.mp4" --start 13 --end 108
 ```
+- 첫 번째 인자: 로컬 영상 파일 경로
 - `--start`: 채보 시작 시간(초)
 - `--end`: 채보 끝 시간(초)
 - 실행하면 캘리브레이션 창이 뜨고, 클릭 완료 후 자동 분석 시작
@@ -39,7 +40,7 @@ time_sec,p1_dl,p1_ul,p1_c,p1_ur,p1_dr,p2_dl,p2_ul,p2_c,p2_ur,p2_dr
 
 ## 의존성
 ```
-pip install yt-dlp opencv-python matplotlib numpy pandas
+pip install opencv-python matplotlib numpy pandas
 ```
 
 ## 파일 구조
@@ -47,14 +48,13 @@ pip install yt-dlp opencv-python matplotlib numpy pandas
 PIU_GET_STEP/
 ├── PROJECT_OVERVIEW.md    # 프로젝트 개요
 ├── piu_extractor.py       # 메인 스크립트 (전체 로직)
-└── (다운로드된 영상 및 결과 CSV는 실행 시 생성)
+└── (결과 CSV는 실행 시 생성)
 ```
 
 ## 구현 상세
 
-### 1. 영상 다운로드 (yt-dlp)
-- YouTube URL → 로컬 mp4 파일 다운로드
-- 720p 이하로 다운로드 (처리 속도 최적화)
+### 1. 영상 파일 확인
+- 로컬 영상 파일(.mp4 등) 존재 여부 확인
 
 ### 2. 캘리브레이션 (matplotlib 인터랙티브)
 - 채보 구간 중간 프레임 1장을 화면에 표시
@@ -77,7 +77,7 @@ PIU_GET_STEP/
 - 홀드 판별 기준: 연속 감지가 일정 프레임 수(예: 15프레임) 이상이면 홀드
 
 ## 검증 방법
-1. 예시 영상(b-PF13GvPqY)을 다운로드하여 테스트
+1. 로컬 채보 영상 파일로 테스트
 2. 캘리브레이션 UI가 정상 동작하는지 확인
 3. 생성된 CSV를 열어 노트 타이밍이 합리적인지 확인
 4. 영상과 CSV를 대조하여 누락/오탐 확인

@@ -1,6 +1,6 @@
 """
 PIU 채보 영상 → CSV 추출 프로그램
-YouTube PUMP IT UP 채보 영상에서 노트 데이터를 자동 추출하여 CSV로 저장
+로컬 PUMP IT UP 채보 영상에서 노트 데이터를 자동 추출하여 CSV로 저장
 """
 
 import argparse
@@ -32,30 +32,14 @@ PIXEL_RATIO = 0.25   # ROI 내 노트 픽셀 비율 최소값
 HOLD_MIN_FRAMES = 15
 
 
-# ── 1. 영상 다운로드 ──────────────────────────────────────────────
+# ── 1. 영상 파일 확인 ────────────────────────────────────────────
 
-def download_video(url: str, output_path: str = "video.mp4") -> str:
-    """yt-dlp로 YouTube 영상 다운로드 (720p 이하)."""
-    if os.path.exists(output_path):
-        print(f"[다운로드] 기존 파일 사용: {output_path}")
-        return output_path
-
-    import yt_dlp
-
-    ydl_opts = {
-        "format": "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best",
-        "outtmpl": output_path,
-        "merge_output_format": "mp4",
-        "quiet": False,
-    }
-    print(f"[다운로드] {url}")
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-
-    if not os.path.exists(output_path):
-        sys.exit("[오류] 다운로드 실패")
-    print(f"[다운로드] 완료: {output_path}")
-    return output_path
+def check_video(video_path: str) -> str:
+    """로컬 영상 파일 존재 여부 확인."""
+    if not os.path.exists(video_path):
+        sys.exit(f"[오류] 영상 파일을 찾을 수 없습니다: {video_path}")
+    print(f"[영상] 파일 확인: {video_path}")
+    return video_path
 
 
 # ── 2. 캘리브레이션 ──────────────────────────────────────────────
@@ -156,7 +140,9 @@ def run_calibration(video_path: str, start_sec: float, end_sec: float,
 # ── 3. 프레임별 노트 감지 ────────────────────────────────────────
 
 def detect_note_in_roi(frame_hsv: np.ndarray, cx: int, cy: int,
-                       hw: int, hh: int) -> bool:
+                       hw: int, hh: int,
+                       sat_thresh: int = SAT_THRESHOLD,
+                       val_thresh: int = VAL_THRESHOLD) -> bool:
     """ROI 영역에서 HSV 채도+밝기 기준으로 노트 존재 여부 판별."""
     h, w = frame_hsv.shape[:2]
     y1 = max(0, cy - hh)
@@ -171,13 +157,14 @@ def detect_note_in_roi(frame_hsv: np.ndarray, cx: int, cy: int,
     s_channel = roi[:, :, 1]
     v_channel = roi[:, :, 2]
 
-    mask = (s_channel >= SAT_THRESHOLD) & (v_channel >= VAL_THRESHOLD)
+    mask = (s_channel >= sat_thresh) & (v_channel >= val_thresh)
     ratio = np.count_nonzero(mask) / mask.size
     return ratio >= PIXEL_RATIO
 
 
 def scan_frames(video_path: str, start_sec: float, end_sec: float,
-                calib: dict) -> list:
+                calib: dict, sat_thresh: int = SAT_THRESHOLD,
+                val_thresh: int = VAL_THRESHOLD) -> list:
     """채보 구간의 모든 프레임을 스캔하여 각 컬럼의 노트 감지 결과 반환.
 
     Returns:
@@ -211,7 +198,8 @@ def scan_frames(video_path: str, start_sec: float, end_sec: float,
 
         frame_hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         detections = [
-            detect_note_in_roi(frame_hsv, cx, det_y, hw, hh)
+            detect_note_in_roi(frame_hsv, cx, det_y, hw, hh,
+                               sat_thresh, val_thresh)
             for cx in col_xs
         ]
         results.append((frame_no, timestamp, detections))
@@ -306,15 +294,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="PIU 채보 영상에서 노트 데이터를 CSV로 추출"
     )
-    parser.add_argument("url", help="YouTube 영상 URL")
+    parser.add_argument("video", help="로컬 영상 파일 경로 (.mp4 등)")
     parser.add_argument("--start", type=float, required=True,
                         help="채보 시작 시간 (초)")
     parser.add_argument("--end", type=float, required=True,
                         help="채보 끝 시간 (초)")
     parser.add_argument("--output", default="chart_output.csv",
                         help="출력 CSV 파일명 (기본: chart_output.csv)")
-    parser.add_argument("--video", default="video.mp4",
-                        help="다운로드 영상 파일명 (기본: video.mp4)")
     parser.add_argument("--calib", default="calibration.json",
                         help="캘리브레이션 JSON 파일명 (기본: calibration.json)")
     parser.add_argument("--hold-frames", type=int, default=HOLD_MIN_FRAMES,
@@ -326,13 +312,8 @@ def main():
 
     args = parser.parse_args()
 
-    # 임계값 적용
-    global SAT_THRESHOLD, VAL_THRESHOLD
-    SAT_THRESHOLD = args.sat_threshold
-    VAL_THRESHOLD = args.val_threshold
-
-    # Step 1: 영상 다운로드
-    video_path = download_video(args.url, args.video)
+    # Step 1: 영상 파일 확인
+    video_path = check_video(args.video)
 
     # Step 2: 캘리브레이션
     calib = run_calibration(video_path, args.start, args.end, args.calib)
@@ -340,7 +321,8 @@ def main():
     print(f"[캘리브레이션] 감지 라인 Y: {calib['detect_y']}")
 
     # Step 3: 프레임 스캔
-    scan_results = scan_frames(video_path, args.start, args.end, calib)
+    scan_results = scan_frames(video_path, args.start, args.end, calib,
+                               args.sat_threshold, args.val_threshold)
 
     # Step 4: 후처리
     events = postprocess(scan_results, hold_min=args.hold_frames)
